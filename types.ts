@@ -1,3 +1,4 @@
+
 export enum AnalysisType {
   COLABORADOR = 'Colaborador',
   EQUIPAMENTO = 'Equipamento'
@@ -36,7 +37,8 @@ export const ALLOWED_SCHOOLS = [
   "STORZ", 
   "PREVENT WORK", 
   "CT Profissional", 
-  "CTAR"
+  "CTAR",
+  "VESTAS"
 ];
 
 export const DEFAULT_COLABORADOR_DOCS = [
@@ -64,7 +66,7 @@ export const DEFAULT_COLABORADOR_DOCS = [
   "NR 12 - Formação/Reciclagem",
   "NR 12 - Carta de Anuência",
   "NR 17",
-  "NR33/Vigia e Trabalhador autorizado - Formação/reciclagem.",
+  "NR33/Vigia e Trabalhador autori+27:42zado - Formação/reciclagem.",
   "NR33/Supervisor - Formação/reciclagem.",
   "Carta de Anuência - NR 33",
   "NR 35 - Formação/Reciclagem",

@@ -1,10 +1,11 @@
+
 import React, { useState } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { ResultCard } from './components/ResultCard';
 import { parseExcelFile } from './services/excelService';
 import { analyzeCertificate, identifyDocumentType } from './services/geminiService';
 import { ExcelData, AnalysisType, AnalysisResult, DEFAULT_COLABORADOR_DOCS } from './types';
-import { FileSpreadsheet, User, Wrench, Loader2, RefreshCw, ArrowLeft } from 'lucide-react';
+import { FileSpreadsheet, User, Wrench, Loader2, RefreshCw, ArrowLeft, Trash2, ChevronRight, CheckCircle2 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [step, setStep] = useState<number>(1);
@@ -15,6 +16,7 @@ const App: React.FC = () => {
 
   // State
   const [excelData, setExcelData] = useState<ExcelData | null>(null);
+  const [excelFileName, setExcelFileName] = useState<string | null>(null);
   const [analysisType, setAnalysisType] = useState<AnalysisType | null>(null);
   const [certificateFiles, setCertificateFiles] = useState<File[]>([]);
   const [results, setResults] = useState<AnalysisResult[]>([]);
@@ -27,12 +29,20 @@ const App: React.FC = () => {
     try {
       const data = await parseExcelFile(files[0]);
       setExcelData(data);
+      setExcelFileName(files[0].name);
       setStep(2);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao ler arquivo Excel");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRemoveParametrization = () => {
+      setExcelData(null);
+      setExcelFileName(null);
+      setAnalysisType(null); // Reseta escolhas subsequentes
+      setError(null);
   };
 
   const handleTypeSelect = (type: AnalysisType) => {
@@ -78,11 +88,18 @@ const App: React.FC = () => {
 
     // Datas para validação
     const today = new Date();
+    
+    // 2 Anos atrás
     const twoYearsAgo = new Date();
     twoYearsAgo.setFullYear(today.getFullYear() - 2);
     
+    // 1 Ano atrás
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(today.getFullYear() - 1);
+    
     const todayStr = today.toLocaleDateString('pt-BR');
     const limitDate2YearsStr = twoYearsAgo.toLocaleDateString('pt-BR');
+    const limitDate1YearStr = oneYearAgo.toLocaleDateString('pt-BR');
 
     try {
       const normalize = (s: string) => s.toLowerCase().trim();
@@ -119,8 +136,6 @@ const App: React.FC = () => {
         // 2. BUSCA DE CRITÉRIOS: Com o nome identificado, buscamos no Excel
         const rows = analysisType === AnalysisType.COLABORADOR ? excelData.empregado : excelData.equipamento;
         
-        // Se for Colaborador e usarmos a lista default, pode ser que o Excel não tenha os critérios
-        // Mas o código antigo já lidava com fallback genérico.
         // Tentamos achar no Excel pelo nome identificado
         const targetRows = rows.filter(r => normalize(r.documento) === normalize(identifiedDocName));
 
@@ -132,36 +147,84 @@ const App: React.FC = () => {
         ));
 
         let combinedCriteria = uniqueCriteriaList.join('\n');
+        const docNameLower = normalize(identifiedDocName);
 
-        // === REGRAS ESPECÍFICAS PARA NR33 (Aplicada baseada no nome identificado) ===
-        if (normalize(identifiedDocName).includes("nr33") || normalize(identifiedDocName).includes("nr 33")) {
+        // --- DEFINIÇÃO DE GRUPOS DE VALIDADE ---
+        const isBienalGroup = 
+            docNameLower.includes("direção defensiva") || 
+            docNameLower.includes("direcao defensiva") ||
+            docNameLower.includes("nr 10") || 
+            docNameLower.includes("nr10") ||
+            docNameLower.includes("nr 11") || 
+            docNameLower.includes("nr11") || // Formação NR11 é bienal
+            docNameLower.includes("nr 12") || 
+            docNameLower.includes("nr12") ||
+            docNameLower.includes("primeiros socorros") ||
+            docNameLower.includes("combate a incêndio") ||
+            docNameLower.includes("gwo") ||
+            docNameLower.includes("eso") ||
+            docNameLower.includes("pt1") ||
+            docNameLower.includes("pt2");
+            
+        // Exceção: Cartão NR11 é anual, LOTO escola é anual
+        const isAnualGroup = 
+            docNameLower.includes("nr 18") || 
+            docNameLower.includes("nr18") || 
+            docNameLower.includes("operador de elevador") ||
+            (docNameLower.includes("loto") && docNameLower.includes("escola")) ||
+            (docNameLower.includes("cartão") && docNameLower.includes("nr11"));
+
+        // === REGRAS ESPECÍFICAS PARA NR33 (Mantido 2 Anos por solicitação) ===
+        if (docNameLower.includes("nr33") || docNameLower.includes("nr 33")) {
             combinedCriteria += `
             
-            ALERTA DE DOCUMENTO NR33 - REQUISITOS OBRIGATÓRIOS ADICIONAIS:
-            Por favor, verifique e liste individualmente os seguintes pontos cruciais para a NR33.
-            Para os itens "OK", extraia o dado (ex: data, nome) na observação.
+            ALERTA DE DOCUMENTO NR33 - REQUISITOS OBRIGATÓRIOS:
+            1. Nome e Assinatura do Trabalhador: EXTRAIA O NOME COMPLETO.
+            2. Conteúdo Programático: Deve estar presente.
+            3. Carga Horária: FORMAÇÃO/INICIAL (40h) ou RECICLAGEM (08h).
+            4. Data e Validade (2 ANOS):
+                - Data Referência: ${todayStr}
+                - Data Limite (2 anos atrás): ${limitDate2YearsStr}
+                - COMPARE a data do curso com ${limitDate2YearsStr}.
+                - Se anterior: VENCIDO (NOK). Se posterior: VÁLIDO (OK).
+                - Obs: "Data: DD/MM/AAAA - Status: [Válido/Vencido]".
+            5. Local de Realização: Identifique.
+            6. Nome e Assinatura do Instrutor: EXTRAIA NOME e FUNÇÃO.
+            7. Assinatura do Responsável Técnico: EXTRAIA NOME.
+            `;
+        }
+        
+        // === REGRAS GERAIS PARA TREINAMENTOS BIENAIS (2 Anos) ===
+        else if (isBienalGroup) {
+             combinedCriteria += `
+            
+            ALERTA VALIDADE BIENAL (2 ANOS) - REQUISITOS OBRIGATÓRIOS:
+            1. Nome e Assinatura do Trabalhador.
+            2. Conteúdo Programático.
+            3. Data e Validade (2 ANOS):
+                - Data Referência: ${todayStr}
+                - Data Limite (2 anos atrás): ${limitDate2YearsStr}
+                - COMPARE a data do curso com ${limitDate2YearsStr}.
+                - Se data curso < ${limitDate2YearsStr} -> STATUS: VENCIDO (NOK).
+                - Se data curso >= ${limitDate2YearsStr} -> STATUS: VÁLIDO (OK).
+                - Obs: "Data: DD/MM/AAAA - Status: [Válido/Vencido]".
+            `;
+        }
 
-            1. Nome e Assinatura do Trabalhador:
-                - Verifique a existência de nome e assinatura.
-                - Na observação, EXTRAIA O NOME COMPLETO do trabalhador/aluno. Ex: "Aluno: João da Silva".
-            2. Conteúdo Programático: Deve estar presente e compatível com a NR33 (Espaço Confinado/Vigia/Supervisor).
-            3. Carga Horária: 
-                - Se for FORMAÇÃO/INICIAL: Exige 40 horas.
-                - Se for RECICLAGEM: Exige 08 horas.
-            4. Data e Validade (Vencimento de 2 Anos):
-                - Data de Referência (Hoje): ${todayStr}
-                - Data Limite de Validade (2 anos atrás): ${limitDate2YearsStr}
-                - COMPARE a data do certificado com a Data Limite.
-                - Se a data do curso for ANTERIOR a ${limitDate2YearsStr} -> Status: VENCIDO (NOK).
-                - Se a data do curso for POSTERIOR a ${limitDate2YearsStr} -> Status: VÁLIDO (OK).
-                - Na observação coloque EXATAMENTE: "Data: DD/MM/AAAA - Status: [Válido/Vencido]".
-            5. Local de Realização: Identifique onde o treinamento ocorreu (Na observação: "Local: [Nome do Local]").
-            6. Nome e Assinatura do Instrutor:
-                - Identifique o NOME legível e a FUNÇÃO/QUALIFICAÇÃO do instrutor.
-                - Na observação coloque: "Instrutor: [Nome] - Função: [Qualificação]".
-            7. Assinatura do Responsável Técnico: 
-                - Verifique se há assinatura do RT.
-                - Na observação, EXTRAIA O NOME do Responsável Técnico. Ex: "RT: Eng. Maria Souza".
+        // === REGRAS GERAIS PARA TREINAMENTOS ANUAIS (1 Ano) ===
+        else if (isAnualGroup) {
+            combinedCriteria += `
+            
+            ALERTA VALIDADE ANUAL (1 ANO) - REQUISITOS OBRIGATÓRIOS:
+            1. Nome e Assinatura do Trabalhador.
+            2. Conteúdo Programático.
+            3. Data e Validade (1 ANO):
+                - Data Referência: ${todayStr}
+                - Data Limite (1 ano atrás): ${limitDate1YearStr}
+                - COMPARE a data do curso com ${limitDate1YearStr}.
+                - Se data curso < ${limitDate1YearStr} -> STATUS: VENCIDO (NOK).
+                - Se data curso >= ${limitDate1YearStr} -> STATUS: VÁLIDO (OK).
+                - Obs: "Data: DD/MM/AAAA - Status: [Válido/Vencido]".
             `;
         }
 
@@ -188,9 +251,9 @@ const App: React.FC = () => {
 
   const handleBack = () => {
     setError(null);
-    if (step === 2) {
-      setExcelData(null);
-    } else if (step === 3) {
+    
+    // OBS: Não limpamos mais o excelData aqui para persistir o arquivo.
+    if (step === 3) {
       setAnalysisType(null);
     } else if (step === 4) {
       setResults([]);
@@ -202,6 +265,7 @@ const App: React.FC = () => {
   const resetApp = () => {
     setStep(1);
     setExcelData(null);
+    setExcelFileName(null);
     setAnalysisType(null);
     setCertificateFiles([]);
     setResults([]);
@@ -227,7 +291,7 @@ const App: React.FC = () => {
               className="flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
             >
               <RefreshCw className="w-4 h-4 mr-1" />
-              Reiniciar
+              Reiniciar Tudo
             </button>
           )}
         </div>
@@ -279,17 +343,52 @@ const App: React.FC = () => {
         {step === 1 && (
           <div className="animate-fadeIn space-y-6">
             <div className="text-center space-y-2">
-              <h2 className="text-2xl font-bold text-gray-900">Upload da Parametrização</h2>
-              <p className="text-gray-500">Envie o arquivo Excel contendo as regras de validação.</p>
+              <h2 className="text-2xl font-bold text-gray-900">Parametrização</h2>
+              <p className="text-gray-500">Defina as regras de validação via Excel.</p>
             </div>
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-               <FileUpload 
-                  accept=".xlsx, .xls" 
-                  label="Arraste o arquivo Excel aqui" 
-                  description="Ou clique para selecionar (formato .xlsx)"
-                  onFilesSelected={handleExcelUpload} 
-                />
-            </div>
+            
+            {excelData ? (
+                <div className="bg-white p-6 rounded-2xl shadow-md border-l-4 border-green-500 flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div className="flex items-center space-x-4">
+                        <div className="bg-green-100 p-3 rounded-full">
+                            <CheckCircle2 className="w-8 h-8 text-green-600" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-gray-800 text-lg">Arquivo Carregado</h3>
+                            <p className="text-gray-500 text-sm">{excelFileName}</p>
+                            <p className="text-xs text-gray-400 mt-1">
+                                {excelData.empregado.length + excelData.equipamento.length} registros encontrados
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center space-x-3 w-full md:w-auto">
+                        <button 
+                            onClick={handleRemoveParametrization}
+                            className="flex-1 md:flex-none px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 font-medium text-sm flex items-center justify-center transition-colors"
+                        >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                        </button>
+                        <button 
+                            onClick={() => setStep(2)}
+                            className="flex-1 md:flex-none px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm flex items-center justify-center transition-colors shadow-sm"
+                        >
+                            Continuar
+                            <ChevronRight className="w-4 h-4 ml-1" />
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+                    <FileUpload 
+                        accept=".xlsx, .xls" 
+                        label="Arraste o arquivo Excel aqui" 
+                        description="Ou clique para selecionar (formato .xlsx)"
+                        onFilesSelected={handleExcelUpload} 
+                    />
+                </div>
+            )}
+            
             {loading && (
                 <div className="flex justify-center items-center text-blue-600 mt-4">
                     <Loader2 className="w-6 h-6 animate-spin mr-2" />
