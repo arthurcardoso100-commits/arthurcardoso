@@ -124,7 +124,8 @@ export const analyzeCertificate = async (
 
     RETORNE APENAS JSON. SEM MARKDOWN.
     Campos:
-    - schoolDetected: Escola encontrada.
+    - schoolDetected: Escola encontrada (Ex: SENAI, VESTAS).
+    - workerName: O NOME COMPLETO do aluno/colaborador identificado no certificado (Ex: "João da Silva").
     - overallStatus: "APPROVED" (se todos OK) ou "REJECTED".
     - criteriaResults: Lista de itens.
       - description: O item avaliado.
@@ -153,6 +154,7 @@ export const analyzeCertificate = async (
                 fileName: { type: Type.STRING },
                 overallStatus: { type: Type.STRING },
                 schoolDetected: { type: Type.STRING },
+                workerName: { type: Type.STRING },
                 criteriaResults: {
                     type: Type.ARRAY,
                     items: {

@@ -23,7 +23,8 @@ export interface CriterionResult {
 
 export interface AnalysisResult {
   fileName: string;
-  identifiedType?: string; // Novo campo para o documento identificado automaticamente
+  identifiedType?: string;
+  workerName?: string; // Novo campo para o nome do colaborador
   overallStatus: 'APPROVED' | 'REJECTED';
   criteriaResults: CriterionResult[];
   schoolDetected?: string;

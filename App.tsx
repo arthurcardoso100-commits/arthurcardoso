@@ -174,7 +174,7 @@ const App: React.FC = () => {
             (docNameLower.includes("loto") && docNameLower.includes("escola")) ||
             (docNameLower.includes("cartão") && docNameLower.includes("nr11"));
 
-        // === REGRAS ESPECÍFICAS PARA NR33 (Mantido 2 Anos por solicitação) ===
+        // === REGRAS ESPECÍFICAS PARA NR33 (Alterado para 1 ANO conforme parametrização) ===
         if (docNameLower.includes("nr33") || docNameLower.includes("nr 33")) {
             combinedCriteria += `
             
@@ -182,10 +182,10 @@ const App: React.FC = () => {
             1. Nome e Assinatura do Trabalhador: EXTRAIA O NOME COMPLETO.
             2. Conteúdo Programático: Deve estar presente.
             3. Carga Horária: FORMAÇÃO/INICIAL (40h) ou RECICLAGEM (08h).
-            4. Data e Validade (2 ANOS):
+            4. Data e Validade (1 ANO):
                 - Data Referência: ${todayStr}
-                - Data Limite (2 anos atrás): ${limitDate2YearsStr}
-                - COMPARE a data do curso com ${limitDate2YearsStr}.
+                - Data Limite (1 ano atrás): ${limitDate1YearStr}
+                - COMPARE a data do curso com ${limitDate1YearStr}.
                 - Se anterior: VENCIDO (NOK). Se posterior: VÁLIDO (OK).
                 - Obs: "Data: DD/MM/AAAA - Status: [Válido/Vencido]".
             5. Local de Realização: Identifique.
