@@ -1,0 +1,5 @@
+{
+  "name": "Verificador de Certificados IA",
+  "description": "Validação inteligente de certificados de treinamento baseada em parametrização via Excel.",
+  "requestFramePermissions": []
+}
